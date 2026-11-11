@@ -62,7 +62,9 @@ const DEF={start:0,cats:[
 {id:'c4',name:'Дом',color:'#2f9e8f',e:'🏠'},
 {id:'c5',name:'Здоровье',color:'#d64545',e:'💊'},
 {id:'c6',name:'Прочее',color:'#7a8793',e:'📦'}],tx:[]};
+function migrate(d){if(!d.cards){d.cards=[{id:'k1',name:'Карта',start:d.start||0}];d.tx.forEach(t=>t.card='k1');delete d.start}return d}
 let S;try{S=JSON.parse(localStorage.getItem(KEY))||DEF}catch(e){S=DEF}
+S=migrate(S);
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('Не удалось сохранить данные')}};
 let tab='home',month=new Date(),sheet=null;
 const $=s=>document.querySelector(s);
@@ -70,7 +72,9 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const money=n=>(Math.round(n*100)/100).toLocaleString('ru-RU',{maximumFractionDigits:2})+' р.';
 const cat=id=>S.cats.find(c=>c.id===id)||{name:'Без категории',color:'#7a8793',e:'❔'};
 const icon=c=>`<span class="ic" style="background:${c.color}33">${c.img?`<img src="${c.img}" alt="">`:esc(c.e||'❔')}</span>`;
-const balance=()=>S.start+S.tx.reduce((a,t)=>a+(t.type==='in'?t.amt:-t.amt),0);
+const cardBal=id=>{const c=S.cards.find(x=>x.id===id);return (c?c.start:0)+S.tx.filter(t=>t.card===id).reduce((a,t)=>a+(t.type==='in'?t.amt:-t.amt),0)};
+const balance=()=>S.cards.reduce((a,c)=>a+cardBal(c.id),0);
+const cardName=id=>{const c=S.cards.find(x=>x.id===id);return c?c.name:'—'};
 const inMonth=(t,m)=>{const d=new Date(t.ts);return d.getFullYear()===m.getFullYear()&&d.getMonth()===m.getMonth()};
 const uid=()=>Math.random().toString(36).slice(2,9);
 const monthName=m=>m.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
@@ -93,8 +97,9 @@ function home(){
   const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([id,v])=>{const c=cat(id);
     return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div class="row"><span class="sp">${esc(c.name)}</span><b>${money(v)}</b></div><div class="bar"><i style="width:${v/so*100}%;background:${c.color}"></i></div></div></div></div>`}).join('');
   return `<h1>Финансы</h1>
-  <div class="card"><div class="mut">Остаток на карте</div><div class="big">${money(balance())}</div>
-  <button class="g" style="margin-top:10px;padding:8px 12px" onclick="openBal()">Изменить остаток</button></div>
+  <div class="card"><div class="mut">Общая сумма</div><div class="big">${money(balance())}</div></div>
+  <div class="card"><b>Карты</b>${S.cards.map(k=>`<div class="item" onclick="openCard('${k.id}')"><div class="row"><span class="ic" style="background:var(--line)">💳</span><span class="sp">${esc(k.name)}</span><b>${money(cardBal(k.id))}</b><span class="mut">›</span></div></div>`).join('')}
+  <button class="g" style="width:100%;margin-top:10px" onclick="openCard()">+ Добавить карту</button></div>
   ${monthNav()}
   <div class="card"><div class="row"><div class="sp"><div class="mut">Расходы</div><b class="neg" style="font-size:20px">${money(so)}</b></div><div class="sp"><div class="mut">Доходы</div><b class="pos" style="font-size:20px">${money(si)}</b></div></div></div>
   <div class="card"><b>По категориям</b>${rows||'<p class="mut">В этом месяце расходов нет</p>'}</div>
@@ -104,7 +109,7 @@ function hist(){
   const list=S.tx.filter(t=>inMonth(t,month)).sort((a,b)=>b.ts-a.ts);
   const h=list.map(t=>{const c=t.type==='in'?{name:'Доход',color:'#3bb88f',e:'💰'}:cat(t.cat);
     const d=new Date(t.ts).toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
-    return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div>${esc(t.note||c.name)}</div><div class="mut">${esc(c.name)} · ${d}</div></div><b class="${t.type==='in'?'pos':'neg'}">${t.type==='in'?'+':'−'}${money(t.amt)}</b><button class="d" style="padding:6px" onclick="delTx('${t.id}')">✕</button></div></div>`}).join('');
+    return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div>${esc(t.note||c.name)}</div><div class="mut">${esc(c.name)} · ${esc(cardName(t.card))} · ${d}</div></div><b class="${t.type==='in'?'pos':'neg'}">${t.type==='in'?'+':'−'}${money(t.amt)}</b><button class="d" style="padding:6px" onclick="delTx('${t.id}')">✕</button></div></div>`}).join('');
   return `<h1>История</h1>${monthNav()}<div class="card">${h||'<p class="mut">Операций нет</p>'}</div><button class="fab" onclick="openTx()">+</button>`;
 }
 function cats(){
@@ -120,11 +125,12 @@ function openSheet(html){const s=document.createElement('div');s.className='shee
 function closeSheet(){if(sheet){sheet.remove();sheet=null}}
 
 let draft;
-function openTx(){draft={type:'out',cat:S.cats[0]&&S.cats[0].id};drawTx()}
+function openTx(){draft={type:'out',cat:S.cats[0]&&S.cats[0].id,card:S.tx.length?S.tx[S.tx.length-1].card:S.cards[0].id};drawTx()}
 function drawTx(keep){
   const v=keep||{};
   closeSheet();
   openSheet(`<div class="seg"><button class="${draft.type==='out'?'':'g'}" onclick="setType('out')">Расход</button><button class="${draft.type==='in'?'':'g'}" onclick="setType('in')">Доход</button></div>
+  <label>Карта</label><select onchange="draft.card=this.value">${S.cards.map(k=>`<option value="${k.id}" ${draft.card===k.id?'selected':''}>${esc(k.name)}</option>`).join('')}</select>
   <label>Сумма, р.</label><input id="amt" inputmode="decimal" placeholder="0" value="${esc(v.amt||'')}">
   ${draft.type==='out'?`<label>Категория</label><div class="grid">${S.cats.map(c=>`<div class="chip ${draft.cat===c.id?'on':''}" onclick="pickCat('${c.id}')">${icon(c)}<span>${esc(c.name)}</span></div>`).join('')}</div>`:''}
   <label>Заметка</label><input id="note" placeholder="Необязательно" value="${esc(v.note||'')}">
@@ -139,18 +145,29 @@ function addTx(){
   const amt=parseFloat($('#amt').value.replace(',','.').replace(/\s/g,''));
   if(!(amt>0)){$('#amt').focus();return}
   const d=$('#dt').value?new Date($('#dt').value+'T12:00:00'):new Date();
-  S.tx.push({id:uid(),type:draft.type,cat:draft.type==='out'?draft.cat:null,amt,note:$('#note').value.trim(),ts:d.getTime()});
+  S.tx.push({id:uid(),card:draft.card,type:draft.type,cat:draft.type==='out'?draft.cat:null,amt,note:$('#note').value.trim(),ts:d.getTime()});
   save();closeSheet();render();
 }
 function delTx(id){if(confirm('Удалить операцию?')){S.tx=S.tx.filter(t=>t.id!==id);save();render()}}
-function openBal(){
-  openSheet(`<b>Остаток на карте</b><label>Сколько сейчас на карте, р.</label><input id="bal" inputmode="decimal" value="${Math.round(balance()*100)/100}"><button style="width:100%;margin-top:16px" onclick="setBal()">Сохранить</button>`);
+let cardEd;
+function openCard(id){
+  const k=id?S.cards.find(x=>x.id===id):null;
+  cardEd=id||null;
+  openSheet(`<b>${k?'Карта':'Новая карта'}</b>
+  <label>Название</label><input id="kn" value="${esc(k?k.name:'')}" placeholder="Например, Зарплатная">
+  <label>${k?'Сколько сейчас на карте, р.':'Текущий остаток, р.'}</label><input id="kb" inputmode="decimal" value="${k?Math.round(cardBal(id)*100)/100:0}">
+  <div class="seg" style="margin-top:18px"><button onclick="saveCard()">Сохранить</button>${k&&S.cards.length>1?'<button class="g neg" onclick="delCard()">Удалить</button>':''}</div>`);
 }
-function setBal(){
-  const v=parseFloat($('#bal').value.replace(',','.').replace(/\s/g,''));
-  if(isNaN(v))return;
-  S.start+=v-balance();save();closeSheet();render();
+function saveCard(){
+  const name=$('#kn').value.trim();
+  const v=parseFloat($('#kb').value.replace(',','.').replace(/\s/g,''));
+  if(!name){$('#kn').focus();return}
+  if(isNaN(v)){$('#kb').focus();return}
+  if(cardEd){const k=S.cards.find(x=>x.id===cardEd);k.start+=v-cardBal(cardEd);k.name=name}
+  else S.cards.push({id:uid(),name,start:v});
+  save();closeSheet();render();
 }
+function delCard(){if(confirm('Удалить карту вместе со всеми её операциями?')){S.tx=S.tx.filter(t=>t.card!==cardEd);S.cards=S.cards.filter(c=>c.id!==cardEd);save();closeSheet();render()}}
 let cd;
 function openCat(id){
   cd=id?{...cat(id),id}:{id:null,name:'',color:'#3b82c4',e:'⭐'};
@@ -199,7 +216,7 @@ function imp(inp){
   const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);
     if(!Array.isArray(d.cats)||!Array.isArray(d.tx))throw 0;
-    if(confirm('Заменить текущие данные импортированными?')){S=d;save();render()}}catch(e){alert('Файл не похож на копию данных')}};
+    if(confirm('Заменить текущие данные импортированными?')){S=migrate(d);save();render()}}catch(e){alert('Файл не похож на копию данных')}};
   r.readAsText(f);
 }
 document.body.insertAdjacentHTML('beforeend',`<nav>
