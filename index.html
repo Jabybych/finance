@@ -62,7 +62,7 @@ const DEF={start:0,cats:[
 {id:'c4',name:'Дом',color:'#2f9e8f',e:'🏠'},
 {id:'c5',name:'Здоровье',color:'#d64545',e:'💊'},
 {id:'c6',name:'Прочее',color:'#7a8793',e:'📦'}],tx:[]};
-function migrate(d){if(!d.cards){d.cards=[{id:'k1',name:'Карта',start:d.start||0}];d.tx.forEach(t=>t.card='k1');delete d.start}return d}
+function migrate(d){if(!d.cards){d.cards=[{id:'k1',name:'Счёт',start:d.start||0}];d.tx.forEach(t=>t.card='k1');delete d.start}d.rem=d.rem||[];d.wish=d.wish||[];return d}
 let S;try{S=JSON.parse(localStorage.getItem(KEY))||DEF}catch(e){S=DEF}
 S=migrate(S);
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('Не удалось сохранить данные')}};
@@ -72,7 +72,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const money=n=>(Math.round(n*100)/100).toLocaleString('ru-RU',{maximumFractionDigits:2})+' р.';
 const cat=id=>S.cats.find(c=>c.id===id)||{name:'Без категории',color:'#7a8793',e:'❔'};
 const icon=c=>`<span class="ic" style="background:${c.color}33">${c.img?`<img src="${c.img}" alt="">`:esc(c.e||'❔')}</span>`;
-const cardBal=id=>{const c=S.cards.find(x=>x.id===id);return (c?c.start:0)+S.tx.filter(t=>t.card===id).reduce((a,t)=>a+(t.type==='in'?t.amt:-t.amt),0)};
+const cardBal=id=>{const c=S.cards.find(x=>x.id===id);return (c?c.start:0)+S.tx.reduce((a,t)=>{if(t.type==='tr'&&t.to===id)a+=t.amt;if(t.card===id)a+=(t.type==='in'?t.amt:-t.amt);return a},0)};
 const balance=()=>S.cards.filter(c=>!c.excl).reduce((a,c)=>a+cardBal(c.id),0);
 const cardName=id=>{const c=S.cards.find(x=>x.id===id);return c?c.name:'—'};
 const inMonth=(t,m)=>{const d=new Date(t.ts);return d.getFullYear()===m.getFullYear()&&d.getMonth()===m.getMonth()};
@@ -84,6 +84,7 @@ function render(){
   if(tab==='home')a.innerHTML=home();
   if(tab==='hist')a.innerHTML=hist();
   if(tab==='cats')a.innerHTML=cats();
+  if(tab==='plans')a.innerHTML=plans();
   if(tab==='more')a.innerHTML=more();
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
 }
@@ -98,7 +99,7 @@ function home(){
     return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div class="row"><span class="sp">${esc(c.name)}</span><b>${money(v)}</b></div><div class="bar"><i style="width:${v/so*100}%;background:${c.color}"></i></div></div></div></div>`}).join('');
   return `<h1>Финансы</h1>
   <div class="card"><div class="mut">Общая сумма</div><div class="big">${money(balance())}</div></div>
-  <div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Карты</b><button class="g" style="padding:0;width:30px;height:30px;font-size:20px;line-height:1;border-radius:15px" onclick="openCard()" aria-label="Добавить карту">+</button></div>${S.cards.map(k=>`<div class="item" onclick="openCard('${k.id}')"><div class="row">${icon({color:k.color||'#3b82c4',e:k.e||'💳',img:k.img})}<span class="sp">${esc(k.name)}${k.excl?'<br><span class="mut" style="font-size:12px">не входит в общую сумму</span>':''}</span><b>${money(cardBal(k.id))}</b><span class="mut">›</span></div></div>`).join('')}</div>
+  <div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Счета</b><button class="g" style="padding:0;width:30px;height:30px;font-size:20px;line-height:1;border-radius:15px" onclick="openCard()" aria-label="Добавить счёт">+</button></div>${S.cards.map(k=>`<div class="item" onclick="openCard('${k.id}')"><div class="row">${icon({color:k.color||'#3b82c4',e:k.e||'💳',img:k.img})}<span class="sp">${esc(k.name)}${k.excl?'<br><span class="mut" style="font-size:12px">не учитывается</span>':''}</span><b>${money(cardBal(k.id))}</b><span class="mut">›</span></div></div>`).join('')}</div>
   ${monthNav()}
   <div class="card"><div class="row"><div class="sp"><div class="mut">Расходы</div><b class="neg" style="font-size:20px">${money(so)}</b></div><div class="sp"><div class="mut">Доходы</div><b class="pos" style="font-size:20px">${money(si)}</b></div></div></div>
   <div class="card"><b>По категориям</b>${rows||'<p class="mut">В этом месяце расходов нет</p>'}</div>
@@ -106,9 +107,9 @@ function home(){
 }
 function hist(){
   const list=S.tx.filter(t=>inMonth(t,month)).sort((a,b)=>b.ts-a.ts);
-  const h=list.map(t=>{const c=t.type==='in'?{name:'Доход',color:'#3bb88f',e:'💰'}:cat(t.cat);
+  const h=list.map(t=>{const c=t.type==='in'?{name:'Доход',color:'#3bb88f',e:'💰'}:t.type==='tr'?{name:'Перевод',color:'#3b82c4',e:'🔁'}:cat(t.cat);
     const d=new Date(t.ts).toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
-    return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div>${esc(t.note||c.name)}</div><div class="mut">${esc(c.name)} · ${esc(cardName(t.card))} · ${d}</div></div><b class="${t.type==='in'?'pos':'neg'}">${t.type==='in'?'+':'−'}${money(t.amt)}</b><button class="d" style="padding:6px" onclick="delTx('${t.id}')">✕</button></div></div>`}).join('');
+    return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div>${esc(t.note||c.name)}</div><div class="mut">${esc(c.name)} · ${t.type==='tr'?esc(cardName(t.card))+' → '+esc(cardName(t.to)):esc(cardName(t.card))} · ${d}</div></div><b class="${t.type==='in'?'pos':t.type==='tr'?'':'neg'}">${t.type==='in'?'+':t.type==='tr'?'':'−'}${money(t.amt)}</b><button class="d" style="padding:6px" onclick="delTx('${t.id}')">✕</button></div></div>`}).join('');
   return `<h1>История</h1>${monthNav()}<div class="card">${h||'<p class="mut">Операций нет</p>'}</div><button class="fab" onclick="openTx()">+</button>`;
 }
 function cats(){
@@ -116,7 +117,7 @@ function cats(){
   <button style="width:100%" onclick="openCat()">+ Новая категория</button>`;
 }
 function more(){
-  return `<h1>Ещё</h1><div class="card"><b>Резервная копия</b><p class="mut">Данные хранятся только на этом телефоне. Если удалить иконку или очистить данные Safari, они пропадут. Время от времени сохраняйте копию в «Файлы».</p>
+  return `<h1>Обо мне</h1><div class="card"><label style="margin-top:0">Ваш доход, р.</label><input id="sal" inputmode="decimal" placeholder="0" value="${S.salary||''}" onchange="saveSal(this.value)"></div><div class="card"><b>Резервная копия</b><p class="mut">Данные хранятся только на этом телефоне. Если удалить иконку или очистить данные Safari, они пропадут. Время от времени сохраняйте копию в «Файлы».</p>
   <div class="seg"><button onclick="exp()">Экспорт</button><button class="g" onclick="$('#imp').click()">Импорт</button></div>
   <input type="file" id="imp" accept="application/json" hidden onchange="imp(this)"></div>`;
 }
@@ -128,8 +129,8 @@ function openTx(){draft={type:'out',cat:S.cats[0]&&S.cats[0].id,card:S.tx.length
 function drawTx(keep){
   const v=keep||{};
   closeSheet();
-  openSheet(`<div class="seg"><button class="${draft.type==='out'?'':'g'}" onclick="setType('out')">Расход</button><button class="${draft.type==='in'?'':'g'}" onclick="setType('in')">Доход</button></div>
-  <label>Карта</label><select onchange="draft.card=this.value">${S.cards.map(k=>`<option value="${k.id}" ${draft.card===k.id?'selected':''}>${esc(k.name)}</option>`).join('')}</select>
+  openSheet(`<div class="seg"><button class="${draft.type==='out'?'':'g'}" onclick="setType('out')">Расход</button><button class="${draft.type==='in'?'':'g'}" onclick="setType('in')">Доход</button><button class="${draft.type==='tr'?'':'g'}" onclick="setType('tr')">Перевод</button></div>
+  ${draft.type==='tr'?`<label>Со счёта</label><select onchange="setFrom(this.value)">${cardOpts(draft.card)}</select><label>На счёт</label><select onchange="setTo(this.value)">${cardOpts(draft.to)}</select>`:`<label>Счёт</label><select onchange="draft.card=this.value">${cardOpts(draft.card)}</select>`}
   <label>Сумма, р.</label><input id="amt" inputmode="decimal" placeholder="0" value="${esc(v.amt||'')}">
   ${draft.type==='out'?`<label>Категория</label><div class="grid">${S.cats.map(c=>`<div class="chip ${draft.cat===c.id?'on':''}" onclick="pickCat('${c.id}')">${icon(c)}<span>${esc(c.name)}</span></div>`).join('')}</div>`:''}
   <label>Заметка</label><input id="note" placeholder="Необязательно" value="${esc(v.note||'')}">
@@ -138,13 +139,16 @@ function drawTx(keep){
   if(!keep)setTimeout(()=>{const a=$('#amt');a&&a.focus()},50);
 }
 function snap(){return{amt:$('#amt').value,note:$('#note').value,dt:$('#dt').value}}
-function setType(t){const s=snap();draft.type=t;drawTx(s)}
+const cardOpts=sel=>S.cards.map(k=>`<option value="${k.id}" ${sel===k.id?'selected':''}>${esc(k.name)}</option>`).join('');
+function setType(t){if(t==='tr'&&S.cards.length<2){alert('Для перевода нужно минимум два счёта');return}const s=snap();draft.type=t;if(t==='tr'&&(!draft.to||draft.to===draft.card))draft.to=S.cards.find(c=>c.id!==draft.card).id;drawTx(s)}
+function setFrom(v){const s=snap();draft.card=v;if(draft.to===v)draft.to=S.cards.find(c=>c.id!==v).id;drawTx(s)}
+function setTo(v){const s=snap();draft.to=v;if(draft.card===v)draft.card=S.cards.find(c=>c.id!==v).id;drawTx(s)}
 function pickCat(id){const s=snap();draft.cat=id;drawTx(s)}
 function addTx(){
   const amt=parseFloat($('#amt').value.replace(',','.').replace(/\s/g,''));
   if(!(amt>0)){$('#amt').focus();return}
   const d=$('#dt').value?new Date($('#dt').value+'T12:00:00'):new Date();
-  S.tx.push({id:uid(),card:draft.card,type:draft.type,cat:draft.type==='out'?draft.cat:null,amt,note:$('#note').value.trim(),ts:d.getTime()});
+  S.tx.push({id:uid(),card:draft.card,type:draft.type,cat:draft.type==='out'?draft.cat:null,to:draft.type==='tr'?draft.to:undefined,amt,note:$('#note').value.trim(),ts:d.getTime()});
   save();closeSheet();render();
 }
 function delTx(id){if(confirm('Удалить операцию?')){S.tx=S.tx.filter(t=>t.id!==id);save();render()}}
@@ -166,9 +170,9 @@ function openCard(id){
 }
 function drawCard(){
   closeSheet();
-  openSheet(`<b>${kd.id?'Карта':'Новая карта'}</b>
+  openSheet(`<b>${kd.id?'Счёт':'Новый счёт'}</b>
   <label>Название</label><input id="kn" value="${esc(kd.name)}" placeholder="Например, Зарплатная">
-  <label>${kd.id?'Сколько сейчас на карте, р.':'Текущий остаток, р.'}</label><input id="kb" inputmode="decimal" value="${esc(kd.bal)}">
+  <label>${kd.id?'Сколько сейчас на счёте, р.':'Текущий остаток, р.'}</label><input id="kb" inputmode="decimal" value="${esc(kd.bal)}">
   <label>Цвет</label><input id="kc" type="color" value="${kd.color}">
   <label>Эмодзи</label><input id="ke" value="${esc(kd.e||'')}" maxlength="4">
   <label>Или своя картинка</label>
@@ -192,7 +196,7 @@ function saveCard(){
   else{o.id=uid();o.start=v;S.cards.push(o)}
   save();closeSheet();render();
 }
-function delCard(){if(confirm('Удалить карту вместе со всеми её операциями?')){S.tx=S.tx.filter(t=>t.card!==kd.id);S.cards=S.cards.filter(c=>c.id!==kd.id);save();closeSheet();render()}}
+function delCard(){if(confirm('Удалить счёт вместе со всеми его операциями, включая переводы?')){S.tx=S.tx.filter(t=>t.card!==kd.id&&t.to!==kd.id);S.cards=S.cards.filter(c=>c.id!==kd.id);save();closeSheet();render()}}
 let cd;
 function openCat(id){
   cd=id?{...cat(id),id}:{id:null,name:'',color:'#3b82c4',e:'⭐'};
@@ -244,11 +248,108 @@ function imp(inp){
     if(confirm('Заменить текущие данные импортированными?')){S=migrate(d);save();render()}}catch(e){alert('Файл не похож на копию данных')}};
   r.readAsText(f);
 }
+let ptab='rem',rd,wd,snoozed=new Set();
+const REP={none:'Не повторять',day:'Каждый день',week:'Каждую неделю',month:'Каждый месяц',year:'Каждый год'};
+function addPeriod(ts,rep){
+  const d=new Date(ts);
+  if(rep==='day')d.setDate(d.getDate()+1);
+  else if(rep==='week')d.setDate(d.getDate()+7);
+  else{const n=rep==='year'?12:1,day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+n);d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()))}
+  return d.getTime();
+}
+const dtLocal=ts=>new Date(ts-new Date(ts).getTimezoneOffset()*60000).toISOString().slice(0,16);
+const fmtDT=ts=>new Date(ts).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+const termText=m=>m%12===0?(m/12)+' г.':m+' мес.';
+const plusBtn=a=>`<button class="g" style="padding:0;width:30px;height:30px;font-size:20px;line-height:1;border-radius:15px" onclick="${a}" aria-label="Добавить">+</button>`;
+const numv=v=>parseFloat(String(v).replace(',','.').replace(/\s/g,''));
+function plans(){
+  const seg=`<div class="seg" style="margin-bottom:12px"><button class="${ptab==='rem'?'':'g'}" onclick="ptab='rem';render()">Напоминания</button><button class="${ptab==='wish'?'':'g'}" onclick="ptab='wish';render()">Желания</button></div>`;
+  if(ptab==='rem'){
+    const list=[...S.rem].sort((a,b)=>a.ts-b.ts);
+    const rows=list.map(r=>`<div class="item" onclick="openRem('${r.id}')"><div class="row"><span class="ic" style="background:${r.type==='in'?'#3bb88f33':'#d6454533'}">${r.type==='in'?'💰':'💸'}</span><div class="sp"><div>${esc(r.title)}${r.must?' <b style="color:var(--red)">!</b>':''}</div><div class="mut ${r.ts<=Date.now()?'neg':''}">${fmtDT(r.ts)}${r.rep!=='none'?' · '+REP[r.rep].toLowerCase():''}</div></div><b class="${r.type==='in'?'pos':'neg'}">${r.type==='in'?'+':'−'}${money(r.amt)}</b></div></div>`).join('');
+    return `<h1>Планы</h1>${seg}<div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Напоминания</b>${plusBtn('openRem()')}</div>${rows||'<p class="mut">Напоминаний пока нет. Нажмите «+», чтобы добавить.</p>'}</div>`;
+  }
+  const sal=numv(S.salary)||0;
+  const rows=S.wish.map(w=>{
+    const pm=w.amt/w.months,until=new Date(w.ts);until.setMonth(until.getMonth()+w.months);
+    return `<div class="item" onclick="openWish('${w.id}')"><div class="row"><span class="ic" style="background:#9b59b633">🎯</span><div class="sp"><div>${esc(w.name)}</div><div class="mut">${money(w.amt)} · ${termText(w.months)} · к ${until.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</div><div class="pos"><b>Откладывать ${money(pm)} в месяц</b></div>${sal?`<div class="mut">≈ ${Math.round(pm/sal*100)}% зарплаты</div>`:''}</div></div></div>`}).join('');
+  return `<h1>Планы</h1>${seg}<div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Желания</b>${plusBtn('openWish()')}</div>${rows||'<p class="mut">Желаний пока нет. Нажмите «+», чтобы добавить.</p>'}</div>`;
+}
+function openRem(id){
+  const r=id?S.rem.find(x=>x.id===id):null,t=new Date();t.setMinutes(0,0,0);t.setHours(t.getHours()+1);
+  rd={id:id||null,type:r?r.type:'out',title:r?r.title:'',amt:r?r.amt:'',ts:r?r.ts:t.getTime(),rep:r?r.rep:'none',must:r?!!r.must:false};
+  drawRem();
+}
+function drawRem(){
+  closeSheet();
+  openSheet(`<div class="seg"><button class="${rd.type==='out'?'':'g'}" onclick="remType('out')">Расход</button><button class="${rd.type==='in'?'':'g'}" onclick="remType('in')">Доход</button></div>
+  <label>Название</label><input id="rt" value="${esc(rd.title)}" placeholder="Например, аренда">
+  <label>Сумма, р.</label><input id="ra" inputmode="decimal" value="${esc(rd.amt)}">
+  <label>Дата и время</label><input id="rw" type="datetime-local" value="${dtLocal(rd.ts)}">
+  <label>Повтор</label><select id="rr">${Object.entries(REP).map(([k,v])=>`<option value="${k}" ${rd.rep===k?'selected':''}>${v}</option>`).join('')}</select>
+  <label style="display:flex;align-items:center;gap:10px;color:var(--tx);font-size:16px;margin-top:16px"><input type="checkbox" id="rm" style="width:22px;height:22px;flex:none" ${rd.must?'checked':''}>Обязательное <b style="color:var(--red)">!</b></label>
+  <div class="seg" style="margin-top:18px"><button onclick="saveRem()">Сохранить</button>${rd.id?'<button class="g neg" onclick="delRem()">Удалить</button>':''}</div>`);
+}
+function keepRem(){rd.title=$('#rt').value;rd.amt=$('#ra').value;rd.ts=new Date($('#rw').value).getTime()||rd.ts;rd.rep=$('#rr').value;rd.must=$('#rm').checked}
+function remType(t){keepRem();rd.type=t;drawRem()}
+function saveRem(){
+  keepRem();
+  const title=rd.title.trim(),amt=numv(rd.amt);
+  if(!title){$('#rt').focus();return}
+  if(!(amt>0)){$('#ra').focus();return}
+  const o={id:rd.id||uid(),type:rd.type,title,amt,ts:rd.ts,rep:rd.rep,must:rd.must};
+  const i=S.rem.findIndex(x=>x.id===o.id);
+  if(i>=0)S.rem[i]=o;else S.rem.push(o);
+  snoozed.delete(o.id);save();closeSheet();render();
+}
+function delRem(){if(confirm('Удалить напоминание?')){S.rem=S.rem.filter(x=>x.id!==rd.id);save();closeSheet();render()}}
+function openWish(id){
+  const w=id?S.wish.find(x=>x.id===id):null,y=w&&w.months%12===0;
+  wd={id:id||null,name:w?w.name:'',amt:w?w.amt:'',n:w?(y?w.months/12:w.months):1,u:y?'y':'m'};
+  closeSheet();
+  openSheet(`<b>${wd.id?'Желание':'Новое желание'}</b>
+  <label>Что хотите</label><input id="wn" value="${esc(wd.name)}" placeholder="Например, ноутбук">
+  <label>Сумма, которую нужно накопить, р.</label><input id="wa" inputmode="decimal" value="${esc(wd.amt)}">
+  <label>За какой срок хотите купить</label>
+  <div class="row"><input id="wt" type="number" min="1" inputmode="numeric" value="${wd.n}"><select id="wu"><option value="m" ${wd.u==='m'?'selected':''}>мес.</option><option value="y" ${wd.u==='y'?'selected':''}>лет</option></select></div>
+  <div class="seg" style="margin-top:18px"><button onclick="saveWish()">Сохранить</button>${wd.id?'<button class="g neg" onclick="delWish()">Удалить</button>':''}</div>`);
+}
+function saveWish(){
+  const name=$('#wn').value.trim(),amt=numv($('#wa').value),n=parseInt($('#wt').value);
+  if(!name){$('#wn').focus();return}
+  if(!(amt>0)){$('#wa').focus();return}
+  if(!(n>0)){$('#wt').focus();return}
+  const months=$('#wu').value==='y'?n*12:n;
+  if(wd.id){const w=S.wish.find(x=>x.id===wd.id);w.name=name;w.amt=amt;w.months=months;w.ts=Date.now()}
+  else S.wish.push({id:uid(),name,amt,months,ts:Date.now()});
+  save();closeSheet();render();
+}
+function delWish(){if(confirm('Удалить желание?')){S.wish=S.wish.filter(x=>x.id!==wd.id);save();closeSheet();render()}}
+function saveSal(v){S.salary=numv(v)||0;save();render()}
+function checkDue(){
+  if(sheet)return;
+  const r=S.rem.filter(x=>x.ts<=Date.now()&&!snoozed.has(x.id)).sort((a,b)=>a.ts-b.ts)[0];
+  if(!r)return;
+  snoozed.add(r.id);
+  openSheet(`<b>Напоминание ${r.must?'<span style="color:var(--red)">!</span>':''}</b>
+  <p style="font-size:18px">${r.type==='in'?'Получили':'Потратили'} «${esc(r.title)}» — ${money(r.amt)}?</p>
+  <p class="mut">Запланировано на ${fmtDT(r.ts)}</p>
+  <div class="seg"><button onclick="dueYes('${r.id}')">Да</button><button class="g" onclick="closeSheet();setTimeout(checkDue,300)">Нет</button></div>`);
+}
+function dueYes(id){
+  const r=S.rem.find(x=>x.id===id);
+  if(r){if(r.rep==='none')S.rem=S.rem.filter(x=>x.id!==id);else{do{r.ts=addPeriod(r.ts,r.rep)}while(r.ts<=Date.now())}}
+  save();closeSheet();render();setTimeout(checkDue,300);
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){snoozed.clear();checkDue()}});
+setInterval(checkDue,60000);
+setTimeout(checkDue,400);
 document.body.insertAdjacentHTML('beforeend',`<nav>
 <button data-t="home" onclick="tab='home';render()"><b>🏠</b>Главная</button>
 <button data-t="hist" onclick="tab='hist';render()"><b>📋</b>История</button>
 <button data-t="cats" onclick="tab='cats';render()"><b>🎨</b>Категории</button>
-<button data-t="more" onclick="tab='more';render()"><b>⚙️</b>Ещё</button></nav>`);
+<button data-t="plans" onclick="tab='plans';render()"><b>🗓️</b>Планы</button>
+<button data-t="more" onclick="tab='more';render()"><b>👤</b>Обо мне</button></nav>`);
 render();
 // иконка для экрана «Домой»
 try{const cv=document.createElement('canvas');cv.width=cv.height=180;const g=cv.getContext('2d');
