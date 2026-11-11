@@ -73,7 +73,7 @@ const money=n=>(Math.round(n*100)/100).toLocaleString('ru-RU',{maximumFractionDi
 const cat=id=>S.cats.find(c=>c.id===id)||{name:'Без категории',color:'#7a8793',e:'❔'};
 const icon=c=>`<span class="ic" style="background:${c.color}33">${c.img?`<img src="${c.img}" alt="">`:esc(c.e||'❔')}</span>`;
 const cardBal=id=>{const c=S.cards.find(x=>x.id===id);return (c?c.start:0)+S.tx.filter(t=>t.card===id).reduce((a,t)=>a+(t.type==='in'?t.amt:-t.amt),0)};
-const balance=()=>S.cards.reduce((a,c)=>a+cardBal(c.id),0);
+const balance=()=>S.cards.filter(c=>!c.excl).reduce((a,c)=>a+cardBal(c.id),0);
 const cardName=id=>{const c=S.cards.find(x=>x.id===id);return c?c.name:'—'};
 const inMonth=(t,m)=>{const d=new Date(t.ts);return d.getFullYear()===m.getFullYear()&&d.getMonth()===m.getMonth()};
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -98,7 +98,7 @@ function home(){
     return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div class="row"><span class="sp">${esc(c.name)}</span><b>${money(v)}</b></div><div class="bar"><i style="width:${v/so*100}%;background:${c.color}"></i></div></div></div></div>`}).join('');
   return `<h1>Финансы</h1>
   <div class="card"><div class="mut">Общая сумма</div><div class="big">${money(balance())}</div></div>
-  <div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Карты</b><button class="g" style="padding:0;width:30px;height:30px;font-size:20px;line-height:1;border-radius:15px" onclick="openCard()" aria-label="Добавить карту">+</button></div>${S.cards.map(k=>`<div class="item" onclick="openCard('${k.id}')"><div class="row">${icon({color:k.color||'#3b82c4',e:k.e||'💳',img:k.img})}<span class="sp">${esc(k.name)}</span><b>${money(cardBal(k.id))}</b><span class="mut">›</span></div></div>`).join('')}</div>
+  <div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Карты</b><button class="g" style="padding:0;width:30px;height:30px;font-size:20px;line-height:1;border-radius:15px" onclick="openCard()" aria-label="Добавить карту">+</button></div>${S.cards.map(k=>`<div class="item" onclick="openCard('${k.id}')"><div class="row">${icon({color:k.color||'#3b82c4',e:k.e||'💳',img:k.img})}<span class="sp">${esc(k.name)}${k.excl?'<br><span class="mut" style="font-size:12px">не входит в общую сумму</span>':''}</span><b>${money(cardBal(k.id))}</b><span class="mut">›</span></div></div>`).join('')}</div>
   ${monthNav()}
   <div class="card"><div class="row"><div class="sp"><div class="mut">Расходы</div><b class="neg" style="font-size:20px">${money(so)}</b></div><div class="sp"><div class="mut">Доходы</div><b class="pos" style="font-size:20px">${money(si)}</b></div></div></div>
   <div class="card"><b>По категориям</b>${rows||'<p class="mut">В этом месяце расходов нет</p>'}</div>
@@ -160,7 +160,7 @@ function resizeImg(f,cb){
 let kd;
 function openCard(id){
   const k=id?S.cards.find(x=>x.id===id):null;
-  kd={id:id||null,name:k?k.name:'',bal:k?Math.round(cardBal(id)*100)/100:0,color:(k&&k.color)||'#3b82c4',e:k?(k.e||'💳'):'💳'};
+  kd={id:id||null,name:k?k.name:'',bal:k?Math.round(cardBal(id)*100)/100:0,color:(k&&k.color)||'#3b82c4',e:k?(k.e||'💳'):'💳',excl:!!(k&&k.excl)};
   if(k&&k.img)kd.img=k.img;
   drawCard();
 }
@@ -174,9 +174,10 @@ function drawCard(){
   <label>Или своя картинка</label>
   <div class="row">${icon({color:kd.color,e:kd.e,img:kd.img})}<button class="g" onclick="$('#kf').click()">Выбрать фото</button>${kd.img?'<button class="d" onclick="noKImg()">Убрать</button>':''}</div>
   <input type="file" id="kf" accept="image/*" hidden onchange="pickKImg(this)">
+  <label style="display:flex;align-items:center;gap:10px;color:var(--tx);font-size:16px;margin-top:16px"><input type="checkbox" id="kx" style="width:22px;height:22px;flex:none" ${kd.excl?'checked':''}>Не учитывать в общей сумме</label>
   <div class="seg" style="margin-top:18px"><button onclick="saveCard()">Сохранить</button>${kd.id&&S.cards.length>1?'<button class="g neg" onclick="delCard()">Удалить</button>':''}</div>`);
 }
-function keepCard(){kd.name=$('#kn').value;kd.bal=$('#kb').value;kd.color=$('#kc').value;kd.e=$('#ke').value}
+function keepCard(){kd.name=$('#kn').value;kd.bal=$('#kb').value;kd.color=$('#kc').value;kd.e=$('#ke').value;kd.excl=$('#kx').checked}
 function noKImg(){keepCard();delete kd.img;drawCard()}
 function pickKImg(inp){const f=inp.files[0];if(!f)return;keepCard();resizeImg(f,u=>{kd.img=u;drawCard()})}
 function saveCard(){
@@ -186,7 +187,7 @@ function saveCard(){
   if(!name){$('#kn').focus();return}
   if(isNaN(v)){$('#kb').focus();return}
   const o={name,color:kd.color,e:kd.e||'💳'};
-  if(kd.img)o.img=kd.img;
+  if(kd.img)o.img=kd.img;if(kd.excl)o.excl=true;
   if(kd.id){const i=S.cards.findIndex(x=>x.id===kd.id),old=S.cards[i];o.id=old.id;o.start=old.start+v-cardBal(old.id);S.cards[i]=o}
   else{o.id=uid();o.start=v;S.cards.push(o)}
   save();closeSheet();render();
