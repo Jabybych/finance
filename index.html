@@ -98,8 +98,7 @@ function home(){
     return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div class="row"><span class="sp">${esc(c.name)}</span><b>${money(v)}</b></div><div class="bar"><i style="width:${v/so*100}%;background:${c.color}"></i></div></div></div></div>`}).join('');
   return `<h1>Финансы</h1>
   <div class="card"><div class="mut">Общая сумма</div><div class="big">${money(balance())}</div></div>
-  <div class="card"><b>Карты</b>${S.cards.map(k=>`<div class="item" onclick="openCard('${k.id}')"><div class="row"><span class="ic" style="background:var(--line)">💳</span><span class="sp">${esc(k.name)}</span><b>${money(cardBal(k.id))}</b><span class="mut">›</span></div></div>`).join('')}
-  <button class="g" style="width:100%;margin-top:10px" onclick="openCard()">+ Добавить карту</button></div>
+  <div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Карты</b><button class="g" style="padding:0;width:30px;height:30px;font-size:20px;line-height:1;border-radius:15px" onclick="openCard()" aria-label="Добавить карту">+</button></div>${S.cards.map(k=>`<div class="item" onclick="openCard('${k.id}')"><div class="row">${icon({color:k.color||'#3b82c4',e:k.e||'💳',img:k.img})}<span class="sp">${esc(k.name)}</span><b>${money(cardBal(k.id))}</b><span class="mut">›</span></div></div>`).join('')}</div>
   ${monthNav()}
   <div class="card"><div class="row"><div class="sp"><div class="mut">Расходы</div><b class="neg" style="font-size:20px">${money(so)}</b></div><div class="sp"><div class="mut">Доходы</div><b class="pos" style="font-size:20px">${money(si)}</b></div></div></div>
   <div class="card"><b>По категориям</b>${rows||'<p class="mut">В этом месяце расходов нет</p>'}</div>
@@ -149,25 +148,50 @@ function addTx(){
   save();closeSheet();render();
 }
 function delTx(id){if(confirm('Удалить операцию?')){S.tx=S.tx.filter(t=>t.id!==id);save();render()}}
-let cardEd;
+function resizeImg(f,cb){
+  const r=new FileReader();
+  r.onload=()=>{const im=new Image();im.onload=()=>{
+    const s=96,cv=document.createElement('canvas');cv.width=cv.height=s;
+    const m=Math.min(im.width,im.height),x=(im.width-m)/2,y=(im.height-m)/2;
+    cv.getContext('2d').drawImage(im,x,y,m,m,0,0,s,s);
+    cb(cv.toDataURL('image/jpeg',.8))};im.src=r.result};
+  r.readAsDataURL(f);
+}
+let kd;
 function openCard(id){
   const k=id?S.cards.find(x=>x.id===id):null;
-  cardEd=id||null;
-  openSheet(`<b>${k?'Карта':'Новая карта'}</b>
-  <label>Название</label><input id="kn" value="${esc(k?k.name:'')}" placeholder="Например, Зарплатная">
-  <label>${k?'Сколько сейчас на карте, р.':'Текущий остаток, р.'}</label><input id="kb" inputmode="decimal" value="${k?Math.round(cardBal(id)*100)/100:0}">
-  <div class="seg" style="margin-top:18px"><button onclick="saveCard()">Сохранить</button>${k&&S.cards.length>1?'<button class="g neg" onclick="delCard()">Удалить</button>':''}</div>`);
+  kd={id:id||null,name:k?k.name:'',bal:k?Math.round(cardBal(id)*100)/100:0,color:(k&&k.color)||'#3b82c4',e:k?(k.e||'💳'):'💳'};
+  if(k&&k.img)kd.img=k.img;
+  drawCard();
 }
+function drawCard(){
+  closeSheet();
+  openSheet(`<b>${kd.id?'Карта':'Новая карта'}</b>
+  <label>Название</label><input id="kn" value="${esc(kd.name)}" placeholder="Например, Зарплатная">
+  <label>${kd.id?'Сколько сейчас на карте, р.':'Текущий остаток, р.'}</label><input id="kb" inputmode="decimal" value="${esc(kd.bal)}">
+  <label>Цвет</label><input id="kc" type="color" value="${kd.color}">
+  <label>Эмодзи</label><input id="ke" value="${esc(kd.e||'')}" maxlength="4">
+  <label>Или своя картинка</label>
+  <div class="row">${icon({color:kd.color,e:kd.e,img:kd.img})}<button class="g" onclick="$('#kf').click()">Выбрать фото</button>${kd.img?'<button class="d" onclick="noKImg()">Убрать</button>':''}</div>
+  <input type="file" id="kf" accept="image/*" hidden onchange="pickKImg(this)">
+  <div class="seg" style="margin-top:18px"><button onclick="saveCard()">Сохранить</button>${kd.id&&S.cards.length>1?'<button class="g neg" onclick="delCard()">Удалить</button>':''}</div>`);
+}
+function keepCard(){kd.name=$('#kn').value;kd.bal=$('#kb').value;kd.color=$('#kc').value;kd.e=$('#ke').value}
+function noKImg(){keepCard();delete kd.img;drawCard()}
+function pickKImg(inp){const f=inp.files[0];if(!f)return;keepCard();resizeImg(f,u=>{kd.img=u;drawCard()})}
 function saveCard(){
-  const name=$('#kn').value.trim();
-  const v=parseFloat($('#kb').value.replace(',','.').replace(/\s/g,''));
+  keepCard();
+  const name=kd.name.trim();
+  const v=parseFloat(String(kd.bal).replace(',','.').replace(/\s/g,''));
   if(!name){$('#kn').focus();return}
   if(isNaN(v)){$('#kb').focus();return}
-  if(cardEd){const k=S.cards.find(x=>x.id===cardEd);k.start+=v-cardBal(cardEd);k.name=name}
-  else S.cards.push({id:uid(),name,start:v});
+  const o={name,color:kd.color,e:kd.e||'💳'};
+  if(kd.img)o.img=kd.img;
+  if(kd.id){const i=S.cards.findIndex(x=>x.id===kd.id),old=S.cards[i];o.id=old.id;o.start=old.start+v-cardBal(old.id);S.cards[i]=o}
+  else{o.id=uid();o.start=v;S.cards.push(o)}
   save();closeSheet();render();
 }
-function delCard(){if(confirm('Удалить карту вместе со всеми её операциями?')){S.tx=S.tx.filter(t=>t.card!==cardEd);S.cards=S.cards.filter(c=>c.id!==cardEd);save();closeSheet();render()}}
+function delCard(){if(confirm('Удалить карту вместе со всеми её операциями?')){S.tx=S.tx.filter(t=>t.card!==kd.id);S.cards=S.cards.filter(c=>c.id!==kd.id);save();closeSheet();render()}}
 let cd;
 function openCat(id){
   cd=id?{...cat(id),id}:{id:null,name:'',color:'#3b82c4',e:'⭐'};
