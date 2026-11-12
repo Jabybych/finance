@@ -49,7 +49,18 @@ nav b{display:block;font-size:22px;line-height:1.1}
 .seg{display:flex;gap:8px}.seg button{flex:1}
 .mn{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .mn button{padding:8px 14px}
+summary{list-style:none;display:flex;align-items:center;gap:6px;padding:10px 0;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+summary::before{content:'›';display:inline-block;width:16px;color:var(--mut);transition:transform .15s}
+details[open]>summary::before{transform:rotate(90deg)}
+summary span{margin-left:auto}
+details.yr>summary{font-size:19px;border-bottom:1px solid var(--line)}
+details.mo{margin-left:8px}
+details.mo>summary{font-size:16px}
+.dayh{font-size:13px;color:var(--mut);margin:8px 0 0 22px;font-weight:600}
+details.mo .item{margin-left:22px}
 </style>
+
 </head>
 <body>
 <div id="app"></div>
@@ -265,8 +276,24 @@ const numv=v=>parseFloat(String(v).replace(',','.').replace(/\s/g,''));
 function plans(){
   const seg=`<div class="seg" style="margin-bottom:12px"><button class="${ptab==='rem'?'':'g'}" onclick="ptab='rem';render()">Напоминания</button><button class="${ptab==='wish'?'':'g'}" onclick="ptab='wish';render()">Желания</button></div>`;
   if(ptab==='rem'){
-    const list=[...S.rem].sort((a,b)=>a.ts-b.ts);
-    const rows=list.map(r=>`<div class="item" onclick="openRem('${r.id}')"><div class="row"><span class="ic" style="background:${r.type==='in'?'#3bb88f33':'#d6454533'}">${r.type==='in'?'💰':'💸'}</span><div class="sp"><div>${esc(r.title)}${r.must?' <b style="color:var(--red)">!</b>':''}</div><div class="mut ${r.ts<=Date.now()?'neg':''}">${fmtDT(r.ts)}${r.rep!=='none'?' · '+REP[r.rep].toLowerCase():''}</div></div><b class="${r.type==='in'?'pos':'neg'}">${r.type==='in'?'+':'−'}${money(r.amt)}</b></div></div>`).join('');
+    const list=[...S.rem].sort((a,b)=>a.ts-b.ts),now=new Date(),cy=now.getFullYear(),cm=now.getMonth();
+    const tree=new Map();
+    list.forEach(r=>{
+      const d=new Date(r.ts),y=d.getFullYear(),m=d.getMonth(),k=d.getDate();
+      if(!tree.has(y))tree.set(y,new Map());
+      const ym=tree.get(y);if(!ym.has(m))ym.set(m,new Map());
+      const md=ym.get(m);if(!md.has(k))md.set(k,[]);
+      md.get(k).push(r);
+    });
+    const remRow=r=>`<div class="item" onclick="openRem('${r.id}')"><div class="row"><span class="ic" style="background:${r.type==='in'?'#3bb88f33':'#d6454533'}">${r.type==='in'?'💰':'💸'}</span><div class="sp"><div>${esc(r.title)}${r.must?' <b style="color:var(--red)">!</b>':''}</div><div class="mut ${r.ts<=Date.now()?'neg':''}">${new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}${r.rep!=='none'?' · '+REP[r.rep].toLowerCase():''}</div></div><b class="${r.type==='in'?'pos':'neg'}">${r.type==='in'?'+':'−'}${money(r.amt)}</b></div></div>`;
+    const late=r=>r.ts<=Date.now();
+    const rows=[...tree].map(([y,ym])=>{
+      const all=[...ym.values()].flatMap(md=>[...md.values()].flat());
+      return `<details class="yr" ${y===cy||all.some(late)?'open':''}><summary><b>${y}</b><span class="mut">${all.length}</span></summary>${[...ym].map(([m,md])=>{
+        const items=[...md.values()].flat();
+        return `<details class="mo" ${(y===cy&&m===cm)||items.some(late)?'open':''}><summary><b style="text-transform:capitalize">${new Date(y,m,1).toLocaleDateString('ru-RU',{month:'long'})}</b><span class="mut">${items.length}</span></summary>${[...md].map(([k,rs])=>{
+          const d=new Date(y,m,k);
+          return `<div class="dayh">${k} · ${d.toLocaleDateString('ru-RU',{weekday:'long'})}${d.toDateString()===now.toDateString()?' · сегодня':''}</div>${rs.map(remRow).join('')}`}).join('')}</details>`}).join('')}</details>`}).join('');
     return `<h1>Планы</h1>${seg}<div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Напоминания</b>${plusBtn('openRem()')}</div>${rows||'<p class="mut">Напоминаний пока нет. Нажмите «+», чтобы добавить.</p>'}</div>`;
   }
   const sal=numv(S.salary)||0;
