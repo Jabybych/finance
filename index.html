@@ -117,7 +117,7 @@ function cats(){
   <button style="width:100%" onclick="openCat()">+ Новая категория</button>`;
 }
 function more(){
-  return `<h1>Обо мне</h1><div class="card"><label style="margin-top:0">Ваш доход, р.</label><input id="sal" inputmode="decimal" placeholder="0" value="${S.salary||''}" onchange="saveSal(this.value)"></div><div class="card"><b>Резервная копия</b><p class="mut">Данные хранятся только на этом телефоне. Если удалить иконку или очистить данные Safari, они пропадут. Время от времени сохраняйте копию в «Файлы».</p>
+  return `<h1>Обо мне</h1><div class="card"><label style="margin-top:0">Ваш доход, р.</label><input id="sal" inputmode="decimal" placeholder="0" value="${S.salary||''}" onchange="saveSal(this.value)"><label>Обязательные расходы стоят, р. в месяц</label><input id="mand" inputmode="decimal" placeholder="0" value="${S.mand||''}" onchange="saveMand(this.value)"></div><div class="card"><b>Резервная копия</b><p class="mut">Данные хранятся только на этом телефоне. Если удалить иконку или очистить данные Safari, они пропадут. Время от времени сохраняйте копию в «Файлы».</p>
   <div class="seg"><button onclick="exp()">Экспорт</button><button class="g" onclick="$('#imp').click()">Импорт</button></div>
   <input type="file" id="imp" accept="application/json" hidden onchange="imp(this)"></div>`;
 }
@@ -272,12 +272,12 @@ function plans(){
   const sal=numv(S.salary)||0;
   const rows=S.wish.map(w=>{
     const pm=w.amt/w.months,until=new Date(w.ts);until.setMonth(until.getMonth()+w.months);
-    return `<div class="item" onclick="openWish('${w.id}')"><div class="row"><span class="ic" style="background:#9b59b633">🎯</span><div class="sp"><div>${esc(w.name)}</div><div class="mut">${money(w.amt)} · ${termText(w.months)} · к ${until.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</div><div class="pos"><b>Откладывать ${money(pm)} в месяц</b></div>${sal?`<div class="mut">≈ ${Math.round(pm/sal*100)}% зарплаты</div>`:''}</div></div></div>`}).join('');
+    return `<div class="item" onclick="openWish('${w.id}')"><div class="row"><span class="ic" style="background:#9b59b633">🎯</span><div class="sp"><div>${esc(w.name)}</div><div class="mut">${money(w.amt)} · ${termText(w.months)} · к ${until.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</div><div class="pos"><b>Откладывать ${money(pm)} в месяц</b></div>${sal?`<div class="mut">≈ ${Math.round(pm/sal*100)}% дохода</div>`:''}</div></div></div>`}).join('');
   return `<h1>Планы</h1>${seg}<div class="card"><div class="row" style="margin-bottom:4px"><b class="sp">Желания</b>${plusBtn('openWish()')}</div>${rows||'<p class="mut">Желаний пока нет. Нажмите «+», чтобы добавить.</p>'}</div>`;
 }
 function openRem(id){
   const r=id?S.rem.find(x=>x.id===id):null,t=new Date();t.setMinutes(0,0,0);t.setHours(t.getHours()+1);
-  rd={id:id||null,type:r?r.type:'out',title:r?r.title:'',amt:r?r.amt:'',ts:r?r.ts:t.getTime(),rep:r?r.rep:'none',must:r?!!r.must:false};
+  rd={id:id||null,card:(r&&r.card)||S.cards[0].id,cat:(r&&r.cat)||(S.cats[0]&&S.cats[0].id),type:r?r.type:'out',title:r?r.title:'',amt:r?r.amt:'',ts:r?r.ts:t.getTime(),rep:r?r.rep:'none',must:r?!!r.must:false};
   drawRem();
 }
 function drawRem(){
@@ -285,19 +285,20 @@ function drawRem(){
   openSheet(`<div class="seg"><button class="${rd.type==='out'?'':'g'}" onclick="remType('out')">Расход</button><button class="${rd.type==='in'?'':'g'}" onclick="remType('in')">Доход</button></div>
   <label>Название</label><input id="rt" value="${esc(rd.title)}" placeholder="Например, аренда">
   <label>Сумма, р.</label><input id="ra" inputmode="decimal" value="${esc(rd.amt)}">
+  <label>Счёт</label><select id="rc">${cardOpts(rd.card)}</select>${rd.type==='out'?`<label>Категория</label><select id="rk">${S.cats.map(c=>`<option value="${c.id}" ${rd.cat===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>`:''}
   <label>Дата и время</label><input id="rw" type="datetime-local" value="${dtLocal(rd.ts)}">
   <label>Повтор</label><select id="rr">${Object.entries(REP).map(([k,v])=>`<option value="${k}" ${rd.rep===k?'selected':''}>${v}</option>`).join('')}</select>
   <label style="display:flex;align-items:center;gap:10px;color:var(--tx);font-size:16px;margin-top:16px"><input type="checkbox" id="rm" style="width:22px;height:22px;flex:none" ${rd.must?'checked':''}>Обязательное <b style="color:var(--red)">!</b></label>
   <div class="seg" style="margin-top:18px"><button onclick="saveRem()">Сохранить</button>${rd.id?'<button class="g neg" onclick="delRem()">Удалить</button>':''}</div>`);
 }
-function keepRem(){rd.title=$('#rt').value;rd.amt=$('#ra').value;rd.ts=new Date($('#rw').value).getTime()||rd.ts;rd.rep=$('#rr').value;rd.must=$('#rm').checked}
+function keepRem(){rd.title=$('#rt').value;rd.amt=$('#ra').value;rd.ts=new Date($('#rw').value).getTime()||rd.ts;rd.rep=$('#rr').value;rd.must=$('#rm').checked;rd.card=$('#rc').value;if($('#rk'))rd.cat=$('#rk').value}
 function remType(t){keepRem();rd.type=t;drawRem()}
 function saveRem(){
   keepRem();
   const title=rd.title.trim(),amt=numv(rd.amt);
   if(!title){$('#rt').focus();return}
   if(!(amt>0)){$('#ra').focus();return}
-  const o={id:rd.id||uid(),type:rd.type,title,amt,ts:rd.ts,rep:rd.rep,must:rd.must};
+  const o={id:rd.id||uid(),card:rd.card,cat:rd.type==='out'?(rd.cat||null):null,type:rd.type,title,amt,ts:rd.ts,rep:rd.rep,must:rd.must};
   const i=S.rem.findIndex(x=>x.id===o.id);
   if(i>=0)S.rem[i]=o;else S.rem.push(o);
   snoozed.delete(o.id);save();closeSheet();render();
@@ -326,6 +327,7 @@ function saveWish(){
 }
 function delWish(){if(confirm('Удалить желание?')){S.wish=S.wish.filter(x=>x.id!==wd.id);save();closeSheet();render()}}
 function saveSal(v){S.salary=numv(v)||0;save();render()}
+function saveMand(v){S.mand=numv(v)||0;save();render()}
 function checkDue(){
   if(sheet)return;
   const r=S.rem.filter(x=>x.ts<=Date.now()&&!snoozed.has(x.id)).sort((a,b)=>a.ts-b.ts)[0];
@@ -333,11 +335,13 @@ function checkDue(){
   snoozed.add(r.id);
   openSheet(`<b>Напоминание ${r.must?'<span style="color:var(--red)">!</span>':''}</b>
   <p style="font-size:18px">${r.type==='in'?'Получили':'Потратили'} «${esc(r.title)}» — ${money(r.amt)}?</p>
-  <p class="mut">Запланировано на ${fmtDT(r.ts)}</p>
-  <div class="seg"><button onclick="dueYes('${r.id}')">Да</button><button class="g" onclick="closeSheet();setTimeout(checkDue,300)">Нет</button></div>`);
+  <p class="mut">Запланировано на ${fmtDT(r.ts)} · счёт: ${esc(cardName(remCard(r)))}</p>
+  <div style="display:flex;flex-direction:column;gap:8px"><button onclick="dueYes('${r.id}',1)">${r.type==='in'?'Да, зачисли на счёт':'Да, спиши со счёта'}</button><button class="g" onclick="dueYes('${r.id}',0)">Да, ничего не списывай</button><button class="g" onclick="closeSheet();setTimeout(checkDue,300)">Нет, оставь напоминание</button></div>`);
 }
-function dueYes(id){
+const remCard=r=>S.cards.some(c=>c.id===r.card)?r.card:S.cards[0].id;
+function dueYes(id,rec){
   const r=S.rem.find(x=>x.id===id);
+  if(r&&rec)S.tx.push({id:uid(),card:remCard(r),type:r.type,cat:r.type==='out'?(r.cat||null):null,amt:r.amt,note:r.title,ts:Date.now()});
   if(r){if(r.rep==='none')S.rem=S.rem.filter(x=>x.id!==id);else{do{r.ts=addPeriod(r.ts,r.rep)}while(r.ts<=Date.now())}}
   save();closeSheet();render();setTimeout(checkDue,300);
 }
@@ -347,8 +351,8 @@ setTimeout(checkDue,400);
 document.body.insertAdjacentHTML('beforeend',`<nav>
 <button data-t="home" onclick="tab='home';render()"><b>🏠</b>Главная</button>
 <button data-t="hist" onclick="tab='hist';render()"><b>📋</b>История</button>
-<button data-t="cats" onclick="tab='cats';render()"><b>🎨</b>Категории</button>
 <button data-t="plans" onclick="tab='plans';render()"><b>🗓️</b>Планы</button>
+<button data-t="cats" onclick="tab='cats';render()"><b>🎨</b>Категории</button>
 <button data-t="more" onclick="tab='more';render()"><b>👤</b>Обо мне</button></nav>`);
 render();
 // иконка для экрана «Домой»
