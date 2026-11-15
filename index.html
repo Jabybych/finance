@@ -61,6 +61,7 @@ details.mo>summary{font-size:16px}
 details.mo .item{margin-left:22px}
 </style>
 
+
 </head>
 <body>
 <div id="app"></div>
@@ -90,6 +91,7 @@ const inMonth=(t,m)=>{const d=new Date(t.ts);return d.getFullYear()===m.getFullY
 const uid=()=>Math.random().toString(36).slice(2,9);
 const monthName=m=>m.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
 
+
 function render(){
   const a=$('#app');
   if(tab==='home')a.innerHTML=home();
@@ -117,9 +119,9 @@ function home(){
   <button class="fab" onclick="openTx()">+</button>`;
 }
 function hist(){
-  const list=S.tx.filter(t=>inMonth(t,month)).sort((a,b)=>b.ts-a.ts);
+  const list=S.tx.map((t,i)=>({t,i})).filter(x=>inMonth(x.t,month)).sort((a,b)=>b.t.ts-a.t.ts||b.i-a.i).map(x=>x.t);
   const h=list.map(t=>{const c=t.type==='in'?{name:'Доход',color:'#3bb88f',e:'💰'}:t.type==='tr'?{name:'Перевод',color:'#3b82c4',e:'🔁'}:cat(t.cat);
-    const d=new Date(t.ts).toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
+    const d=new Date(t.ts).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
     return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div>${esc(t.note||c.name)}</div><div class="mut">${esc(c.name)} · ${t.type==='tr'?esc(cardName(t.card))+' → '+esc(cardName(t.to)):esc(cardName(t.card))} · ${d}</div></div><b class="${t.type==='in'?'pos':t.type==='tr'?'':'neg'}">${t.type==='in'?'+':t.type==='tr'?'':'−'}${money(t.amt)}</b><button class="d" style="padding:6px" onclick="delTx('${t.id}')">✕</button></div></div>`}).join('');
   return `<h1>История</h1>${monthNav()}<div class="card">${h||'<p class="mut">Операций нет</p>'}</div><button class="fab" onclick="openTx()">+</button>`;
 }
@@ -135,6 +137,7 @@ function more(){
 function openSheet(html){const s=document.createElement('div');s.className='sheet';s.innerHTML=`<div>${html}</div>`;s.onclick=e=>{if(e.target===s)closeSheet()};document.body.appendChild(s);sheet=s}
 function closeSheet(){if(sheet){sheet.remove();sheet=null}}
 
+
 let draft;
 function openTx(){draft={type:'out',cat:S.cats[0]&&S.cats[0].id,card:S.tx.length?S.tx[S.tx.length-1].card:S.cards[0].id};drawTx()}
 function drawTx(keep){
@@ -145,7 +148,7 @@ function drawTx(keep){
   <label>Сумма, р.</label><input id="amt" inputmode="decimal" placeholder="0" value="${esc(v.amt||'')}">
   ${draft.type==='out'?`<label>Категория</label><div class="grid">${S.cats.map(c=>`<div class="chip ${draft.cat===c.id?'on':''}" onclick="pickCat('${c.id}')">${icon(c)}<span>${esc(c.name)}</span></div>`).join('')}</div>`:''}
   <label>Заметка</label><input id="note" placeholder="Необязательно" value="${esc(v.note||'')}">
-  <label>Дата</label><input id="dt" type="date" value="${v.dt||new Date().toISOString().slice(0,10)}">
+  <label>Дата и время</label><input id="dt" type="datetime-local" value="${v.dt||dtLocal(Date.now())}">
   <button style="width:100%;margin-top:16px" onclick="addTx()">Добавить</button>`);
   if(!keep)setTimeout(()=>{const a=$('#amt');a&&a.focus()},50);
 }
@@ -158,7 +161,7 @@ function pickCat(id){const s=snap();draft.cat=id;drawTx(s)}
 function addTx(){
   const amt=parseFloat($('#amt').value.replace(',','.').replace(/\s/g,''));
   if(!(amt>0)){$('#amt').focus();return}
-  const d=$('#dt').value?new Date($('#dt').value+'T12:00:00'):new Date();
+  let d=$('#dt').value?new Date($('#dt').value):new Date();if(isNaN(d))d=new Date();
   S.tx.push({id:uid(),card:draft.card,type:draft.type,cat:draft.type==='out'?draft.cat:null,to:draft.type==='tr'?draft.to:undefined,amt,note:$('#note').value.trim(),ts:d.getTime()});
   save();closeSheet();render();
 }
