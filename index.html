@@ -57,6 +57,9 @@ summary span{margin-left:auto}
 details.yr>summary{font-size:19px;border-bottom:1px solid var(--line)}
 details.mo{margin-left:8px}
 details.mo>summary{font-size:16px}
+.dh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-bottom:8px;margin-bottom:2px;border-bottom:2px solid var(--acc)}
+.dh b{font-size:15px}
+.dh span{font-weight:600;font-size:14px}
 .dayh{font-size:13px;color:var(--mut);margin:8px 0 0 22px;font-weight:600}
 details.mo .item{margin-left:22px}
 </style>
@@ -120,10 +123,19 @@ function home(){
 }
 function hist(){
   const list=S.tx.map((t,i)=>({t,i})).filter(x=>inMonth(x.t,month)).sort((a,b)=>b.t.ts-a.t.ts||b.i-a.i).map(x=>x.t);
-  const h=list.map(t=>{const c=t.type==='in'?{name:'Доход',color:'#3bb88f',e:'💰'}:t.type==='tr'?{name:'Перевод',color:'#3b82c4',e:'🔁'}:cat(t.cat);
-    const d=new Date(t.ts).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div>${esc(t.note||c.name)}</div><div class="mut">${esc(c.name)} · ${t.type==='tr'?esc(cardName(t.card))+' → '+esc(cardName(t.to)):esc(cardName(t.card))} · ${d}</div></div><b class="${t.type==='in'?'pos':t.type==='tr'?'':'neg'}">${t.type==='in'?'+':t.type==='tr'?'':'−'}${money(t.amt)}</b><button class="d" style="padding:6px" onclick="delTx('${t.id}')">✕</button></div></div>`}).join('');
-  return `<h1>История</h1>${monthNav()}<div class="card">${h||'<p class="mut">Операций нет</p>'}</div><button class="fab" onclick="openTx()">+</button>`;
+  const dk=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()};
+  const dayName=ts=>{const d=new Date(ts),n=new Date(),y=new Date();y.setDate(n.getDate()-1);
+    const full=d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',weekday:'long'});
+    return dk(ts)===dk(n.getTime())?'Сегодня · '+full:dk(ts)===dk(y.getTime())?'Вчера · '+full:full[0].toUpperCase()+full.slice(1)};
+  const groups=[];
+  list.forEach(t=>{const k=dk(t.ts),g=groups[groups.length-1];if(g&&g.k===k)g.l.push(t);else groups.push({k,ts:t.ts,l:[t]})});
+  const h=groups.map(g=>{
+    const spent=g.l.filter(t=>t.type==='out').reduce((a,t)=>a+t.amt,0);
+    const items=g.l.map(t=>{const c=t.type==='in'?{name:'Доход',color:'#3bb88f',e:'💰'}:t.type==='tr'?{name:'Перевод',color:'#3b82c4',e:'🔁'}:cat(t.cat);
+      const tm=new Date(t.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      return `<div class="item"><div class="row">${icon(c)}<div class="sp"><div>${esc(t.note||c.name)}</div><div class="mut">${esc(c.name)} · ${t.type==='tr'?esc(cardName(t.card))+' → '+esc(cardName(t.to)):esc(cardName(t.card))} · ${tm}</div></div><b class="${t.type==='in'?'pos':t.type==='tr'?'':'neg'}">${t.type==='in'?'+':t.type==='tr'?'':'−'}${money(t.amt)}</b><button class="d" style="padding:6px" onclick="delTx('${t.id}')">✕</button></div></div>`}).join('');
+    return `<div class="card"><div class="dh"><b>${dayName(g.ts)}</b>${spent?`<span class="neg">−${money(spent)}</span>`:''}</div>${items}</div>`}).join('');
+  return `<h1>История</h1>${monthNav()}${h||'<div class="card"><p class="mut">Операций нет</p></div>'}<button class="fab" onclick="openTx()">+</button>`;
 }
 function cats(){
   return `<h1>Категории</h1><div class="card">${S.cats.map(c=>`<div class="item" onclick="openCat('${c.id}')"><div class="row">${icon(c)}<span class="sp">${esc(c.name)}</span><span style="width:18px;height:18px;border-radius:9px;background:${c.color}"></span><span class="mut">›</span></div></div>`).join('')}</div>
